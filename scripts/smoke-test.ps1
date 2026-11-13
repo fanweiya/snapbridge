@@ -69,10 +69,15 @@ Write-Host "    后台窗口: '$([SB]::Windows([uint32]$proc.Id))'"
 
 Write-Host "[2] 发送 PrintScreen"
 [SB]::Key(0x2C)
-Start-Sleep -Milliseconds 1500
-$wins = [SB]::Windows([uint32]$proc.Id)
+$wins = ""
+for ($i = 0; $i -lt 30; $i++) {
+  Start-Sleep -Milliseconds 100
+  $wins = [SB]::Windows([uint32]$proc.Id)
+  if ($wins) { break }
+}
 Write-Host "    遮罩窗口: $wins"
 if (-not $wins) { throw "热键没有唤起遮罩窗口" }
+Start-Sleep -Milliseconds 400
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
