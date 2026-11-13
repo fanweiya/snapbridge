@@ -202,4 +202,6 @@ snapbridge/
 
 ## 许可
 
-私有项目，保留所有权利。
+[MIT](LICENSE)。可以自由使用、修改、分发，也可以商用，保留版权声明即可。
+
+用到的第三方组件：[mygo](https://github.com/egoist/mygo) 同为 MIT 协议，Go 标准库为 BSD 三条款协议，`golang.org/x/sys` 为 BSD 三条款协议。
