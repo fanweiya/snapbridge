@@ -102,29 +102,38 @@ def render_app(size):
 
     canvas = Image.alpha_composite(canvas, layer)
     canvas = Image.alpha_composite(canvas, layer)
-    return canvas.resize((size, size), Image.LANCZOS)
+    return canvas.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def render_tray(size):
-    """托盘图标：透明底、加倍的线宽，16px 下仍可辨认。"""
+    """托盘图标：深色圆角底 + 加宽的取景框，16px 下仍可辨认。
+
+    托盘图标不能只画线条：Windows 11 的任务栏默认是浅色，
+    纯白透明底的图形在浅色背景上等于隐形，所以这里铺一层深色底板。
+    """
     n = BASE * SS
     k = lambda v: v * SS
+    bg = gradient(n, BG_TOP, BG_BOTTOM)
+    mask = rounded_mask(n, k(268))
     canvas = Image.new("RGBA", (n, n), (0, 0, 0, 0))
-    d = ImageDraw.Draw(canvas)
+    canvas.paste(bg, (0, 0), mask)
 
-    draw_brackets(d, (k(150), k(150), k(874), k(874)), k(268), k(96), WHITE + (255,))
+    layer = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    draw_brackets(d, (k(158), k(158), k(866), k(866)), k(262), k(112), ACCENT + (255,))
     cx = cy = k(512)
-    dot_r = k(150)
+    dot_r = k(146)
     d.ellipse([cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r], fill=WHITE + (255,))
 
-    return canvas.resize((size, size), Image.LANCZOS)
+    canvas = Image.alpha_composite(canvas, layer)
+    return canvas.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def save_ico(img, path, sizes):
     """写入含多尺寸 PNG 载荷的 .ico。"""
     frames = []
     for s in sizes:
-        frames.append((s, img.resize((s, s), Image.LANCZOS)))
+        frames.append((s, img.resize((s, s), Image.Resampling.LANCZOS)))
 
     header = struct.pack("<HHH", 0, 1, len(frames))
     entries = b""
@@ -154,25 +163,23 @@ def main():
 
     tray = render_tray(64)
     tray.save(os.path.join(RES, "tray-64.png"))
-    tray.resize((32, 32), Image.LANCZOS).save(os.path.join(RES, "tray-32.png"))
+    tray.resize((32, 32), Image.Resampling.LANCZOS).save(os.path.join(RES, "tray-32.png"))
 
-    # 预览图：各尺寸平铺在棋盘底上，方便人工核对
-    preview = Image.new("RGBA", (760, 200), (245, 245, 247, 255))
+    # 预览图：上排是应用图标的各尺寸，下排两条模拟任务栏，
+    # 分别在浅色和深色背景上核对托盘图标是否可见。
+    preview = Image.new("RGBA", (760, 520), (245, 245, 247, 255))
     x = 24
     for s in (16, 24, 32, 48, 64, 128, 256):
-        tile = app.resize((s, s), Image.LANCZOS)
-        preview.alpha_composite(tile, (x, 24 + (256 - s) // 2))
+        tile = app.resize((s, s), Image.Resampling.LANCZOS)
+        preview.alpha_composite(tile, (x, 20 + (256 - s) // 2))
         x += s + 24
-    y = 300
-    x = 24
-    for s in (16, 24, 32, 48):
-        tile = tray.resize((s, s), Image.LANCZOS)
-        for py in range(0, y + 100, 8):
-            for px in range(0, 760, 8):
-                if (px // 8 + py // 8) % 2 == 0:
-                    preview.paste((225, 225, 230, 255), (px, py, min(px + 8, 760), min(py + 8, y + 100)))
-        preview.alpha_composite(tile, (x, y + 20))
-        x += s + 32
+
+    for band_y, band_bg in ((300, (238, 238, 242, 255)), (410, (32, 32, 36, 255))):
+        preview.alpha_composite(Image.new("RGBA", (760, 100), band_bg), (0, band_y))
+        x = 24
+        for s in (16, 24, 32, 48):
+            preview.alpha_composite(tray.resize((s, s), Image.Resampling.LANCZOS), (x, band_y + (100 - s) // 2))
+            x += s + 40
     preview.save(os.path.join(RES, "icon-preview.png"))
 
     print("icon.png 1024")
