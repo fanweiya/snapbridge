@@ -103,6 +103,8 @@ Windows 11 的「设置 → 辅助功能 → 键盘 → 使用 Print Screen 键�
 go install github.com/egoist/mygo/cmd/mygo@latest
 ```
 
+`go install` 把 `mygo.exe` 放进 `%USERPROFILE%\go\bin`。`build.ps1` 会自己把 `%USERPROFILE%\go\bin`、`%USERPROFILE%\sdk\go\bin`、`%USERPROFILE%\.bun\bin`、`C:\Program Files\Go\bin` 补进 `PATH`，手工配过环境变量也能正常跑。
+
 拉代码后构建：
 
 ```powershell
