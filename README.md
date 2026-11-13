@@ -31,7 +31,19 @@ SnapBridge 把这两份数据一次写进剪贴板：`PNG` 位图、`CF_HDROP` �
 | `Ctrl + Shift + A` | 区域截图（备用键） |
 | `F1` | 区域截图（备用键） |
 
-Windows 11 的「设置 → 辅助功能 → 键盘 → 使用 Print Screen 键打开屏幕截图」开启时，系统会用底层键盘钩子把这个键抢走，常规热键注册拿不到按键。SnapBridge 自己挂了低级键盘钩子，在系统截图服务之前接管 `PrintScreen`，那个开关开着也照常工作。
+### 与 Windows 自带截图键的关系
+
+Windows 11 有一个开关：「设置 → 辅助功能 → 键盘 → 使用 Print Screen 键打开屏幕截图」，默认开启。开启状态下，这个键归截图工具所有，普通热键注册拿不到，低级键盘钩子也拦不住，因为截图工具通过 Raw Input 取按键，不走钩子链。
+
+ShareX 的处理方式写在它的安装脚本里（`ShareX.Setup/InnoSetup/ShareX-setup.iss`）：把注册表 `HKCU\Control Panel\Keyboard\PrintScreenKeyForSnippingEnabled` 写成 `0`，让这个键回到应用程序手里，然后靠自己的键盘钩子监听。
+
+SnapBridge 做同样的事，只是没藏在安装器里：
+
+- 启动时检测该值，发现系统占着就自动改成 `0`，并在钩子里接管 `PrintScreen`；
+- 托盘菜单里的「接管 Print Screen 键」显示当前归属，随时可以切回去；
+- 切回去之后系统截图工具恢复响应，SnapBridge 的 `PrintScreen` 随之失效。
+
+`Win + Shift + S` 走的是另一条路径，不受这个开关影响，任何时候都能唤出系统截图。想两个都用，就保留系统接管、用 `Ctrl + Shift + A` 或 `F1` 唤起 SnapBridge。
 
 ## 标注与输出
 

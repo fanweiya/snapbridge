@@ -375,6 +375,12 @@ func buildTrayMenu() *mygo.Menu {
 			radio("只要路径", "path"),
 		}},
 		{Label: "打开截图目录", Click: func(*mygo.MenuItem, *mygo.Window) { _ = Shot{}.OpenSaveDir() }},
+		{Label: "接管 Print Screen 键", Type: mygo.MenuItemCheckbox, Checked: snippingKeyOwned(), Click: func(it *mygo.MenuItem, _ *mygo.Window) {
+			if err := setSnippingKeyOwned(it.Checked); err != nil {
+				notify("设置失败", err.Error())
+			}
+			refreshTrayMenu()
+		}},
 		mygo.Separator(),
 		{Label: "退出 SnapBridge", Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.Quit() }},
 	})
@@ -402,8 +408,16 @@ func setupTray(icon []byte) {
 }
 
 func registerHotkeys() {
-	// PrintScreen 系列由 hotkey_windows.go 的低级钩子接管，
-	// 系统「按 Print Screen 键打开屏幕截图」开着也能拿到按键。
+	// PrintScreen 系列由 hotkey_windows.go 的低级钩子接管。
+	// Windows 的「使用 Print Screen 键打开屏幕截图」开着时，截图工具经 Raw Input 取走按键，
+	// 低级键盘钩子拦不住，必须在注册表里把这个键交还应用程序。
+	if !snippingKeyOwned() {
+		if err := setSnippingKeyOwned(true); err != nil {
+			log.Printf("收回 Print Screen 键失败: %v", err)
+			notify("Print Screen 键被系统截图工具占用",
+				"系统设置里的「使用 Print Screen 键打开屏幕截图」处于开启状态，SnapBridge 拿不到这个键。可在托盘菜单里手动切换归属。")
+		}
+	}
 	if err := startSnapshotHook(); err != nil {
 		// 钩子不可用时退回系统热键注册。
 		_ = mygo.GlobalShortcut.Register("PrintScreen", func() { openCapture("region") })
