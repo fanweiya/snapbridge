@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>SnapBridge</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- 底层截屏画面与暗色蒙版 -->
+      <canvas id="bgCanvas"></canvas>
+      <div id="dimLayer"></div>
+
+      <!-- 选区遮罩框与标注画布 -->
+      <div id="selectionBox" class="hidden">
+        <canvas id="selCanvas"></canvas>
+        <canvas id="annoCanvas"></canvas>
+        <div class="handle nw" data-dir="nw"></div>
+        <div class="handle n" data-dir="n"></div>
+        <div class="handle ne" data-dir="ne"></div>
+        <div class="handle e" data-dir="e"></div>
+        <div class="handle se" data-dir="se"></div>
+        <div class="handle s" data-dir="s"></div>
+        <div class="handle sw" data-dir="sw"></div>
+        <div class="handle w" data-dir="w"></div>
+        <div id="sizeBadge">0 × 0</div>
+      </div>
+
+      <!-- 工具栏（跟随选区） -->
+      <div id="toolbar" class="hidden">
+        <div class="tool-group">
+          <button class="tool-btn active" data-tool="select" title="选择与调整选区 (V)">↖</button>
+          <button class="tool-btn" data-tool="rect" title="矩形 (R)">□</button>
+          <button class="tool-btn" data-tool="arrow" title="箭头 (A)">➔</button>
+          <button class="tool-btn" data-tool="pen" title="画笔 (F)">✎</button>
+          <button class="tool-btn" data-tool="text" title="文字 (T)">T</button>
+          <button class="tool-btn" data-tool="step" title="序号图钉 (I)">①</button>
+          <button class="tool-btn" data-tool="highlight" title="荧光高亮 (H)">█</button>
+          <button class="tool-btn" data-tool="mosaic" title="马赛克 (B)">▦</button>
+        </div>
+
+        <div class="tool-group">
+          <button class="color-dot active" style="--c: #e53935" data-color="#e53935" title="红"></button>
+          <button class="color-dot" style="--c: #fb8c00" data-color="#fb8c00" title="橙"></button>
+          <button class="color-dot" style="--c: #43a047" data-color="#43a047" title="绿"></button>
+          <button class="color-dot" style="--c: #1e88e5" data-color="#1e88e5" title="蓝"></button>
+          <button class="color-dot" style="--c: #ffffff" data-color="#ffffff" title="白"></button>
+          <button class="color-dot" style="--c: #212121" data-color="#212121" title="黑"></button>
+          <div class="stroke-wrap">
+            <span class="stroke-btn" data-size="2" title="小号笔画">·</span>
+            <span class="stroke-btn active" data-size="4" title="中号笔画">●</span>
+            <span class="stroke-btn" data-size="8" title="大号笔画">⬤</span>
+          </div>
+        </div>
+
+        <div class="tool-group actions">
+          <button id="btnUndo" class="action-btn" title="撤销 (Ctrl+Z)">↶</button>
+          <button id="btnSave" class="action-btn" title="保存文件 (Ctrl+S)">💾</button>
+          <button id="btnCopyPath" class="action-btn" title="仅复制文件路径 (Ctrl+Shift+C)">📋 路径</button>
+          <button id="btnOk" class="action-btn primary" title="复制完成 (Enter / 双击)">✓ 复制</button>
+          <button id="btnClose" class="action-btn close" title="取消 (Esc)">✕</button>
+        </div>
+      </div>
+
+      <!-- 文字输入悬浮框 -->
+      <textarea id="textEditor" class="hidden" rows="1"></textarea>
+
+      <!-- 放大镜提示 -->
+      <div id="magnifier" class="hidden">
+        <canvas id="magCanvas" width="96" height="96"></canvas>
+        <div id="magInfo">0, 0 | #000000</div>
+      </div>
+
+      <!-- 右下角帮助提示条 -->
+      <div id="hintBar">
+        <span class="key-pill">拖拽框选</span>
+        <span class="key-pill">Enter/双击 复制</span>
+        <span class="key-pill">Ctrl+Shift+C 路径</span>
+        <span class="key-pill">Esc 取消</span>
+        <span id="clipModePill" class="clip-pill" title="点击切换剪贴板模式">模式: 图+路径</span>
+      </div>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
