@@ -52,6 +52,7 @@ type CommitResult struct {
 
 var (
 	stateMu   sync.Mutex
+	captureMu sync.Mutex
 	pending   *captureSession
 	overlay   *mygo.Window
 	overlayMu sync.Mutex
@@ -97,20 +98,16 @@ func (s Shot) Commit(req CommitRequest) (CommitResult, error) {
 	if err != nil {
 		return CommitResult{}, fmt.Errorf("解析图片失败: %w", err)
 	}
-	img, err := png.Decode(bytes.NewReader(data))
+	// 只读 PNG 头核对尺寸就够了，前端导出的已经是合法 PNG，
+	// 再走一遍 Decode 加 Encode 纯属重复劳动，大图要白花几百毫秒。
+	cfg, err := png.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return CommitResult{}, fmt.Errorf("解码 PNG 失败: %w", err)
+		return CommitResult{}, fmt.Errorf("解析图片失败: %w", err)
 	}
-	bounds := img.Bounds()
-	if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
+	if cfg.Width <= 0 || cfg.Height <= 0 {
 		return CommitResult{}, fmt.Errorf("图片尺寸为空")
 	}
-
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
-		return CommitResult{}, fmt.Errorf("编码 PNG 失败: %w", err)
-	}
-	pngBytes := buf.Bytes()
+	pngBytes := data
 
 	res := CommitResult{}
 	path := ""
@@ -128,7 +125,7 @@ func (s Shot) Commit(req CommitRequest) (CommitResult, error) {
 		}
 		res.Copied = true
 	}
-	res.Message = fmt.Sprintf("%d × %d", bounds.Dx(), bounds.Dy())
+	res.Message = fmt.Sprintf("%d × %d", cfg.Width, cfg.Height)
 
 	closeOverlay()
 	stateMu.Lock()
@@ -247,6 +244,13 @@ func copyShot(path string, pngBytes []byte, mode string) error {
 }
 
 func openCapture(mode string) {
+	// 一次只放一个截图流程进来：键盘钩子的消费协程与托盘菜单点击都可能触发，
+	// 两者交错时先建的窗口会被后建的一方覆盖掉，成为一个永不显示的全屏置顶孤儿。
+	if !captureMu.TryLock() {
+		return
+	}
+	defer captureMu.Unlock()
+
 	closeOverlay()
 
 	cap, err := CaptureScreen()
@@ -340,9 +344,21 @@ func closeOverlay() {
 	w := overlay
 	overlay = nil
 	overlayMu.Unlock()
-	if w != nil && !w.IsDestroyed() {
-		w.Close()
+	if w == nil || w.IsDestroyed() {
+		return
 	}
+	w.Close()
+	// Close 只是把销毁动作投递给主线程，BitBlt 比它快得多；
+	// 不等旧遮罩真的从屏幕上消失就抓屏，会把上一次的遮罩拍进新截图。
+	deadline := time.Now().Add(2 * time.Second)
+	for !w.IsDestroyed() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !w.IsDestroyed() {
+		log.Printf("旧遮罩窗口 2 秒内未完成销毁，本次截图可能包含旧画面")
+	}
+	// 销毁完成后让桌面合成器出一帧，再放行抓屏。
+	time.Sleep(33 * time.Millisecond)
 }
 
 func notify(title, body string) {

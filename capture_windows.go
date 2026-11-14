@@ -19,8 +19,6 @@ var (
 	procGetSystemMetrics              = user32.NewProc("GetSystemMetrics")
 	procGetForegroundWindow           = user32.NewProc("GetForegroundWindow")
 	procGetWindowRect                 = user32.NewProc("GetWindowRect")
-	procGetCursorPos                  = user32.NewProc("GetCursorPos")
-	procGetWindowLong                 = user32.NewProc("GetWindowLongW")
 	procCreateCompatibleDC            = gdi32.NewProc("CreateCompatibleDC")
 	procCreateCompatibleBitmap        = gdi32.NewProc("CreateCompatibleBitmap")
 	procSelectObject                  = gdi32.NewProc("SelectObject")
@@ -57,11 +55,6 @@ type bitmapInfoHeader struct {
 type bitmapInfo struct {
 	Header bitmapInfoHeader
 	Colors [1]uint32
-}
-
-type point struct {
-	X int32
-	Y int32
 }
 
 type rect struct {
@@ -163,14 +156,4 @@ func ForegroundWindowRect() (image.Rectangle, error) {
 		return image.Rectangle{}, fmt.Errorf("GetWindowRect 失败")
 	}
 	return image.Rect(int(r.Left), int(r.Top), int(r.Right), int(r.Bottom)), nil
-}
-
-// CursorPosition 返回光标在虚拟桌面上的物理像素位置。
-func CursorPosition() (int, int, error) {
-	var p point
-	ret, _, _ := procGetCursorPos.Call(uintptr(unsafe.Pointer(&p)))
-	if ret == 0 {
-		return 0, 0, fmt.Errorf("GetCursorPos 失败")
-	}
-	return int(p.X), int(p.Y), nil
 }

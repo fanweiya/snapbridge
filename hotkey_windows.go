@@ -82,23 +82,26 @@ func snapshotMode() string {
 }
 
 // fireSnapshot 去抖后把一次截图请求交给消费协程。
+// 时间戳只在请求真的进入队列后才记：通道满时请求被丢，
+// 要是那时也记了时间，之后 280 毫秒内的按键会被去抖挡掉，一起丢掉。
 func fireSnapshot(mode string) {
 	snapshotMu.Lock()
+	defer snapshotMu.Unlock()
 	if time.Since(lastSnapshot) < snapshotGuard {
-		snapshotMu.Unlock()
 		return
 	}
-	lastSnapshot = time.Now()
-	snapshotMu.Unlock()
-
 	select {
 	case snapshotSink <- mode:
+		lastSnapshot = time.Now()
 	default:
 	}
 }
 
 var snapshotCallback = syscall.NewCallback(func(nCode, wParam, lParam uintptr) uintptr {
 	if int32(uint32(nCode)) == 0 {
+		// lParam 是系统在本次回调期间交给钩子的 KBDLLHOOKSTRUCT 指针，
+		// 转换出的指针只在这个栈帧里使用、不逃逸，是 syscall 回调的惯用写法；
+		// go vet 的 unsafeptr 检查在这里是已知误报，检查时带 -unsafeptr=false。
 		kb := (*kbdllHookStruct)(unsafe.Pointer(lParam))
 		if kb.vkCode == vkSnapshot {
 			switch wParam {
