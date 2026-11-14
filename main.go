@@ -116,17 +116,14 @@ func (Shot) Snapshot() (SnapshotData, error) {
 	}, nil
 }
 
-// checkCallerOverlay 验证当前调用是否来自有效的活跃遮罩窗口。
-// 若调用来自已被覆盖或关闭的历史窗口，返回 false 以免误操作新会话。
+// checkCallerOverlay 严格校验当前调用是否来自有效的活跃遮罩窗口。
+// 无调用者上下文、遮罩已被关闭或调用来自历史窗口时直接拒绝。
 func checkCallerOverlay(ctx context.Context) bool {
 	caller := mygo.CallerWindow(ctx)
-	if caller == nil {
-		return true
-	}
 	overlayMu.Lock()
 	cur := overlay
 	overlayMu.Unlock()
-	if cur != nil && caller != cur {
+	if caller == nil || cur == nil || caller != cur {
 		return false
 	}
 	return true
@@ -134,6 +131,11 @@ func checkCallerOverlay(ctx context.Context) bool {
 
 // Commit 保存成品、写入剪贴板，然后关闭遮罩窗口。
 func (s Shot) Commit(ctx context.Context, req CommitRequest) (CommitResult, error) {
+	// 限制 base64 数据文本长度，防止异常大请求耗尽内存。
+	if len(req.PNG) > 64*1024*1024 {
+		return CommitResult{}, fmt.Errorf("图片数据超出大小限制")
+	}
+
 	// 在锁外先进行 CPU 密集的解码与尺寸校验，避免持锁阻塞快捷键响应。
 	raw := strings.TrimPrefix(req.PNG, "data:image/png;base64,")
 	data, err := base64.StdEncoding.DecodeString(raw)
