@@ -50,26 +50,17 @@ type CommitResult struct {
 	Message string `json:"message"`
 }
 
-// pngIENDChunk 是 PNG 收尾的 IEND 块：长度 0 + "IEND" + 固定 CRC。
-var pngIENDChunk = []byte{
-	0x00, 0x00, 0x00, 0x00,
-	0x49, 0x45, 0x4e, 0x44,
-	0xae, 0x42, 0x60, 0x82,
-}
-
-// decodePNGMeta 校验前端交回的 PNG 数据可用，返回尺寸。
-func decodePNGMeta(data []byte) (int, int, error) {
-	cfg, err := png.DecodeConfig(bytes.NewReader(data))
+// validatePNG 完整校验前端传回的图片数据流，保证图片未损坏截断，并返回宽高尺寸。
+func validatePNG(data []byte) (int, int, error) {
+	img, err := png.Decode(bytes.NewReader(data))
 	if err != nil {
 		return 0, 0, fmt.Errorf("解析图片失败: %w", err)
 	}
-	if cfg.Width <= 0 || cfg.Height <= 0 {
+	b := img.Bounds()
+	if b.Dx() <= 0 || b.Dy() <= 0 {
 		return 0, 0, fmt.Errorf("图片尺寸为空")
 	}
-	if !bytes.HasSuffix(data, pngIENDChunk) {
-		return 0, 0, fmt.Errorf("图片数据不完整")
-	}
-	return cfg.Width, cfg.Height, nil
+	return b.Dx(), b.Dy(), nil
 }
 
 var (
@@ -115,18 +106,26 @@ func (Shot) Snapshot() (SnapshotData, error) {
 
 // Commit 保存成品、写入剪贴板，然后关闭遮罩窗口。
 func (s Shot) Commit(req CommitRequest) (CommitResult, error) {
+	// 整个提交阶段加锁保护，防止写盘与复制期间被并发进入的 openCapture 覆盖会话状态。
+	captureMu.Lock()
+	defer captureMu.Unlock()
+
 	raw := strings.TrimPrefix(req.PNG, "data:image/png;base64,")
 	data, err := base64.StdEncoding.DecodeString(raw)
 	if err != nil {
 		return CommitResult{}, fmt.Errorf("解析图片失败: %w", err)
 	}
-	// 只读 PNG 头核对尺寸就够了，前端导出的已经是合法 PNG，
-	// 再走一遍 Decode 加 Encode 纯属重复劳动，大图要白花几百毫秒。
-	width, height, err := decodePNGMeta(data)
+	width, height, err := validatePNG(data)
 	if err != nil {
 		return CommitResult{}, err
 	}
 	pngBytes := data
+
+	// 立即关闭遮罩并清理会话状态，提升界面响应感。
+	closeOverlay()
+	stateMu.Lock()
+	pending = nil
+	stateMu.Unlock()
 
 	res := CommitResult{}
 	path := ""
@@ -145,14 +144,6 @@ func (s Shot) Commit(req CommitRequest) (CommitResult, error) {
 		res.Copied = true
 	}
 	res.Message = fmt.Sprintf("%d × %d", width, height)
-
-	// 提交期间不能再放进新的截图流程，否则新 session 会被这里的 pending=nil 清空。
-	captureMu.Lock()
-	closeOverlay()
-	stateMu.Lock()
-	pending = nil
-	stateMu.Unlock()
-	captureMu.Unlock()
 	return res, nil
 }
 
@@ -173,11 +164,11 @@ func (Shot) Ready() error {
 // Cancel 丢弃本次截图并关闭遮罩窗口。
 func (Shot) Cancel() error {
 	captureMu.Lock()
+	defer captureMu.Unlock()
 	closeOverlay()
 	stateMu.Lock()
 	pending = nil
 	stateMu.Unlock()
-	captureMu.Unlock()
 	return nil
 }
 
