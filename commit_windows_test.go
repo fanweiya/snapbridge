@@ -47,14 +47,30 @@ func TestValidatePNGRejectsTruncatedPNG(t *testing.T) {
 
 func TestValidatePNGRejectsCorruptedIDATWithValidIEND(t *testing.T) {
 	data := encodeTestPNG(t, 64, 32)
-	// 保留尾部 12 字节的合法 IEND 块，破坏中间的 IDAT 数据。
+	// 找到 "IDAT" 关键字的位置，确保 IHDR 块与其 CRC（前 33 字节）保持完全完好。
+	idatIdx := bytes.Index(data, []byte("IDAT"))
+	if idatIdx == -1 {
+		t.Fatal("未在测试图片中找到 IDAT 块")
+	}
+
 	corrupted := make([]byte, len(data))
 	copy(corrupted, data)
-	for i := 32; i < len(corrupted)-16; i++ {
-		corrupted[i] = 0xFF
+
+	// 从 IDAT 数据部分开始翻转字节，但保留尾部 12 字节的合法 IEND 块。
+	startCorrupt := idatIdx + 4
+	endCorrupt := len(corrupted) - 16
+	for i := startCorrupt; i < endCorrupt; i++ {
+		corrupted[i] = 0x5A
 	}
+
+	// 显式核实：纯 DecodeConfig 仅读 IHDR，会被假象蒙骗判定通过。
+	if _, err := png.DecodeConfig(bytes.NewReader(corrupted)); err != nil {
+		t.Fatalf("测试构造错误：IHDR 不应受损，但 DecodeConfig 报错: %v", err)
+	}
+
+	// validatePNG 执行完整解码，必须准确发现 IDAT 损坏并拦截。
 	if _, _, err := validatePNG(corrupted); err == nil {
-		t.Fatal("中间损坏但包含合法 IEND 块的 PNG 未被拦截")
+		t.Fatal("中间 IDAT 损坏但包含合法 IHDR 与 IEND 的 PNG 未被拦截")
 	}
 }
 

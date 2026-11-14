@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"image/jpeg"
@@ -50,16 +51,27 @@ type CommitResult struct {
 	Message string `json:"message"`
 }
 
+// 限制单边像素与总像素量，防止异常超大图片消耗过多资源引发崩溃。
+const maxImageDimension = 16384
+const maxImagePixels = 64 * 1024 * 1024
+
 // validatePNG 完整校验前端传回的图片数据流，保证图片未损坏截断，并返回宽高尺寸。
 func validatePNG(data []byte) (int, int, error) {
-	img, err := png.Decode(bytes.NewReader(data))
+	cfg, err := png.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return 0, 0, fmt.Errorf("解析图片失败: %w", err)
+		return 0, 0, fmt.Errorf("解析图片头部失败: %w", err)
 	}
-	b := img.Bounds()
-	if b.Dx() <= 0 || b.Dy() <= 0 {
+	if cfg.Width <= 0 || cfg.Height <= 0 {
 		return 0, 0, fmt.Errorf("图片尺寸为空")
 	}
+	if cfg.Width > maxImageDimension || cfg.Height > maxImageDimension || int64(cfg.Width)*int64(cfg.Height) > maxImagePixels {
+		return 0, 0, fmt.Errorf("图片尺寸超出系统允许的最大限制")
+	}
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return 0, 0, fmt.Errorf("解码图片数据流失败: %w", err)
+	}
+	b := img.Bounds()
 	return b.Dx(), b.Dy(), nil
 }
 
@@ -104,12 +116,25 @@ func (Shot) Snapshot() (SnapshotData, error) {
 	}, nil
 }
 
-// Commit 保存成品、写入剪贴板，然后关闭遮罩窗口。
-func (s Shot) Commit(req CommitRequest) (CommitResult, error) {
-	// 整个提交阶段加锁保护，防止写盘与复制期间被并发进入的 openCapture 覆盖会话状态。
-	captureMu.Lock()
-	defer captureMu.Unlock()
+// checkCallerOverlay 验证当前调用是否来自有效的活跃遮罩窗口。
+// 若调用来自已被覆盖或关闭的历史窗口，返回 false 以免误操作新会话。
+func checkCallerOverlay(ctx context.Context) bool {
+	caller := mygo.CallerWindow(ctx)
+	if caller == nil {
+		return true
+	}
+	overlayMu.Lock()
+	cur := overlay
+	overlayMu.Unlock()
+	if cur != nil && caller != cur {
+		return false
+	}
+	return true
+}
 
+// Commit 保存成品、写入剪贴板，然后关闭遮罩窗口。
+func (s Shot) Commit(ctx context.Context, req CommitRequest) (CommitResult, error) {
+	// 在锁外先进行 CPU 密集的解码与尺寸校验，避免持锁阻塞快捷键响应。
 	raw := strings.TrimPrefix(req.PNG, "data:image/png;base64,")
 	data, err := base64.StdEncoding.DecodeString(raw)
 	if err != nil {
@@ -121,11 +146,14 @@ func (s Shot) Commit(req CommitRequest) (CommitResult, error) {
 	}
 	pngBytes := data
 
-	// 立即关闭遮罩并清理会话状态，提升界面响应感。
-	closeOverlay()
-	stateMu.Lock()
-	pending = nil
-	stateMu.Unlock()
+	// 整个提交阶段加锁保护，防止写盘与复制期间与 openCapture 交错。
+	captureMu.Lock()
+	defer captureMu.Unlock()
+
+	// 确认当前调用来自最新遮罩，防止历史页面的延迟提交误关闭新会话。
+	if !checkCallerOverlay(ctx) {
+		return CommitResult{}, fmt.Errorf("提交属于已过期的截图会话")
+	}
 
 	res := CommitResult{}
 	path := ""
@@ -144,17 +172,28 @@ func (s Shot) Commit(req CommitRequest) (CommitResult, error) {
 		res.Copied = true
 	}
 	res.Message = fmt.Sprintf("%d × %d", width, height)
+
+	// 只有在写盘与复制均成功完成之后，才关闭遮罩并清理会话。
+	// 若前面发生错误，遮罩与会话保持完好，前端可捕获错误并提示重试。
+	closeOverlay()
+	stateMu.Lock()
+	pending = nil
+	stateMu.Unlock()
+
 	return res, nil
 }
 
 // Ready 由前端在首帧绘制完成后调用，此时才让遮罩窗口露面，
 // 避免窗口已经可见而选区事件尚未绑定的空档。
-func (Shot) Ready() error {
+func (Shot) Ready(ctx context.Context) error {
 	overlayMu.Lock()
 	w := overlay
 	overlayMu.Unlock()
 	if w == nil || w.IsDestroyed() {
 		return fmt.Errorf("遮罩窗口不存在")
+	}
+	if !checkCallerOverlay(ctx) {
+		return fmt.Errorf("会话已失效")
 	}
 	w.Show()
 	w.Focus()
@@ -162,9 +201,14 @@ func (Shot) Ready() error {
 }
 
 // Cancel 丢弃本次截图并关闭遮罩窗口。
-func (Shot) Cancel() error {
+func (Shot) Cancel(ctx context.Context) error {
 	captureMu.Lock()
 	defer captureMu.Unlock()
+
+	if !checkCallerOverlay(ctx) {
+		return nil
+	}
+
 	closeOverlay()
 	stateMu.Lock()
 	pending = nil
