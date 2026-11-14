@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"image"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
 var (
 	user32 = syscall.NewLazyDLL("user32.dll")
 	gdi32  = syscall.NewLazyDLL("gdi32.dll")
+	dwmapi = syscall.NewLazyDLL("dwmapi.dll")
 
 	procSetProcessDpiAwarenessContext = user32.NewProc("SetProcessDpiAwarenessContext")
 	procGetDC                         = user32.NewProc("GetDC")
@@ -26,6 +28,7 @@ var (
 	procDeleteObject                  = gdi32.NewProc("DeleteObject")
 	procDeleteDC                      = gdi32.NewProc("DeleteDC")
 	procGetDIBits                     = gdi32.NewProc("GetDIBits")
+	procDwmFlush                      = dwmapi.NewProc("DwmFlush")
 )
 
 const (
@@ -142,6 +145,14 @@ func CaptureScreen() (*ScreenCapture, error) {
 	}
 
 	return &ScreenCapture{Image: img, X: int(x), Y: int(y)}, nil
+}
+
+// dwmFlush 等桌面合成器把当前这一帧推上屏幕，确保遮罩消失后的区域已经重绘。
+// DWM 不可用时退回固定等待。
+func dwmFlush() {
+	if hres, _, _ := procDwmFlush.Call(); hres != 0 {
+		time.Sleep(33 * time.Millisecond)
+	}
 }
 
 // ForegroundWindowRect 返回前台窗口的物理像素矩形。

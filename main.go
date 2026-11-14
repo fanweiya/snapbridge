@@ -50,6 +50,28 @@ type CommitResult struct {
 	Message string `json:"message"`
 }
 
+// pngIENDChunk 是 PNG 收尾的 IEND 块：长度 0 + "IEND" + 固定 CRC。
+var pngIENDChunk = []byte{
+	0x00, 0x00, 0x00, 0x00,
+	0x49, 0x45, 0x4e, 0x44,
+	0xae, 0x42, 0x60, 0x82,
+}
+
+// decodePNGMeta 校验前端交回的 PNG 数据可用，返回尺寸。
+func decodePNGMeta(data []byte) (int, int, error) {
+	cfg, err := png.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return 0, 0, fmt.Errorf("解析图片失败: %w", err)
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 {
+		return 0, 0, fmt.Errorf("图片尺寸为空")
+	}
+	if !bytes.HasSuffix(data, pngIENDChunk) {
+		return 0, 0, fmt.Errorf("图片数据不完整")
+	}
+	return cfg.Width, cfg.Height, nil
+}
+
 var (
 	stateMu   sync.Mutex
 	captureMu sync.Mutex
@@ -100,12 +122,9 @@ func (s Shot) Commit(req CommitRequest) (CommitResult, error) {
 	}
 	// 只读 PNG 头核对尺寸就够了，前端导出的已经是合法 PNG，
 	// 再走一遍 Decode 加 Encode 纯属重复劳动，大图要白花几百毫秒。
-	cfg, err := png.DecodeConfig(bytes.NewReader(data))
+	width, height, err := decodePNGMeta(data)
 	if err != nil {
-		return CommitResult{}, fmt.Errorf("解析图片失败: %w", err)
-	}
-	if cfg.Width <= 0 || cfg.Height <= 0 {
-		return CommitResult{}, fmt.Errorf("图片尺寸为空")
+		return CommitResult{}, err
 	}
 	pngBytes := data
 
@@ -125,12 +144,15 @@ func (s Shot) Commit(req CommitRequest) (CommitResult, error) {
 		}
 		res.Copied = true
 	}
-	res.Message = fmt.Sprintf("%d × %d", cfg.Width, cfg.Height)
+	res.Message = fmt.Sprintf("%d × %d", width, height)
 
+	// 提交期间不能再放进新的截图流程，否则新 session 会被这里的 pending=nil 清空。
+	captureMu.Lock()
 	closeOverlay()
 	stateMu.Lock()
 	pending = nil
 	stateMu.Unlock()
+	captureMu.Unlock()
 	return res, nil
 }
 
@@ -150,10 +172,12 @@ func (Shot) Ready() error {
 
 // Cancel 丢弃本次截图并关闭遮罩窗口。
 func (Shot) Cancel() error {
+	captureMu.Lock()
 	closeOverlay()
 	stateMu.Lock()
 	pending = nil
 	stateMu.Unlock()
+	captureMu.Unlock()
 	return nil
 }
 
@@ -348,17 +372,16 @@ func closeOverlay() {
 		return
 	}
 	w.Close()
-	// Close 只是把销毁动作投递给主线程，BitBlt 比它快得多；
-	// 不等旧遮罩真的从屏幕上消失就抓屏，会把上一次的遮罩拍进新截图。
-	deadline := time.Now().Add(2 * time.Second)
+	// Close 会阻塞到主线程真正销毁窗口，但屏幕上的像素要等下方窗口重绘、
+	// 合成器出一帧之后才恢复；不等就抓屏，会把上一次的遮罩拍进新截图。
+	deadline := time.Now().Add(time.Second)
 	for !w.IsDestroyed() && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if !w.IsDestroyed() {
-		log.Printf("旧遮罩窗口 2 秒内未完成销毁，本次截图可能包含旧画面")
+		log.Printf("旧遮罩窗口未在 1 秒内完成销毁，本次截图可能包含旧画面")
 	}
-	// 销毁完成后让桌面合成器出一帧，再放行抓屏。
-	time.Sleep(33 * time.Millisecond)
+	dwmFlush()
 }
 
 func notify(title, body string) {
