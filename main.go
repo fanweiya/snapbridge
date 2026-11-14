@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
 	"github.com/egoist/mygo/transfer"
 )
 
@@ -375,6 +376,7 @@ func buildTrayMenu() *mygo.Menu {
 			radio("只要路径", "path"),
 		}},
 		{Label: "打开截图目录", Click: func(*mygo.MenuItem, *mygo.Window) { _ = Shot{}.OpenSaveDir() }},
+		updater.MenuItem(),
 		{Label: "接管 Print Screen 键", Type: mygo.MenuItemCheckbox, Checked: snippingKeyOwned(), Click: func(it *mygo.MenuItem, _ *mygo.Window) {
 			if err := setSnippingKeyOwned(it.Checked); err != nil {
 				notify("设置失败", err.Error())
@@ -450,6 +452,11 @@ func defaultSaveDir() string {
 
 func main() {
 	saveDir = defaultSaveDir()
+
+	// 更新检查与下载走镜像回退，必须在插件第一次检查之前装好。
+	useMirroredUpdates()
+	mygo.Use(updater.New(updater.Options{Icon: appIconPNG()}))
+
 	mygo.Bind(Shot{})
 
 	mygo.App.WhenReady(func() {

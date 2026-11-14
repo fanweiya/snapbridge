@@ -95,9 +95,30 @@ SnapBridge 做同样的事，只是没藏在安装器里：
 
 ## 安装
 
-从 Releases 下载 `snapbridge-setup-0.1.0-amd64.exe` 安装，或者直接用 `SnapBridge.exe` 单文件，它不需要安装、不需要运行时，拷到哪都能跑。首次运行 Windows 可能提示 SmartScreen，选「更多信息 → 仍要运行」。可执行文件没有代码签名。
+从 Releases 下载 `snapbridge-setup-0.1.1-amd64.exe` 安装，或者直接用 `SnapBridge.exe` 单文件，它不需要安装、不需要运行时，拷到哪都能跑。首次运行 Windows 可能提示 SmartScreen，选「更多信息 → 仍要运行」。可执行文件没有代码签名。
+
+安装包装到 `%LOCALAPPDATA%\Programs\SnapBridge`，不需要管理员权限，装完就能自更新；单文件版放在哪个目录就在哪个目录更新，那个目录要有写权限。
 
 程序依赖系统的 WebView2 运行时，Windows 11 自带，Windows 10 需要装一次 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。
+
+## 自动更新
+
+程序启动后会自己查一次新版本，之后每天查一次，发现新版弹出更新窗口，列出更新说明，可以选「立即安装」「稍后提醒」或「跳过这个版本」。窗口里还有两个开关：是否自动检查、是否直接下载并安装。手动检查走托盘菜单的「检查更新…」。
+
+更新包用 Ed25519 签名，程序只接受用对应私钥签出的版本，代理或中间人替换过的安装包会在校验阶段被拒。
+
+国内直连 GitHub 经常断开，检查与下载都会在下面这些通道间依次回退，一个不通就换下一个：
+
+```
+直连 api.github.com / github.com
+ghfast.top
+gh-proxy.com
+ghproxy.net
+ghproxy.cfd
+gh-proxy.net
+```
+
+只有能做到 `https://gh-proxy.com/https://github.com/...` 这种前缀拼接的站点才在列表里，具体可用性会变，实测失效的会被换掉。要换自己的通道，改 `update.go` 里的 `downloadMirrors` 与 `apiMirrors`。
 
 ### 开机自启
 
@@ -129,7 +150,18 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 产物在 `build\windows-amd64\`：
 
 - `SnapBridge.exe` 单文件可执行程序；
-- `snapbridge-setup-0.1.0-amd64.exe` NSIS 安装包。
+- `snapbridge-setup-0.1.1-amd64.exe` NSIS 安装包；
+- `snapbridge-0.1.1-windows-amd64.tar.gz` 更新包，`update-windows-amd64.json` 是它对应的清单。
+
+要发布自动更新，先一次性生成密钥：
+
+```powershell
+mygo keygen
+```
+
+公钥填进 `mygo.config.ts` 的 `updates.publicKey`，私钥 `mygo-update.key` 留在 `%APPDATA%\mygo\update-keys\` 下，不要提交进仓库。`build.ps1` 构建时会读这个文件设进环境变量，签不出来的更新包装不上，所以这个文件要单独备份。
+
+发版时把 `SnapBridge.exe`、安装包、`snapbridge-*-windows-amd64.tar.gz`、`update-windows-amd64.json` 一起传到 Release。缺了清单里的归档，老版本会卡在下载；缺了清单，老版本会提示该发布不支持自动更新。
 
 前端热更新：
 
@@ -168,6 +200,7 @@ powershell -ExecutionPolicy Bypass -File scripts\smoke-test.ps1
 | 热键 | `PrintScreen` 走 `WH_KEYBOARD_LL` 低级钩子，其余走 `RegisterHotKey` |
 | 剪贴板 | 一次写入三种格式：`image/png`（平台层转成 `CF_DIB`）、`CF_HDROP` 文件列表、`CF_UNICODETEXT` |
 | 打包 | MyGo 把前端资源嵌入二进制，附带 NSIS 安装包 |
+| 更新 | MyGo 的 `Updater` 加官方更新窗口插件，清单与归档走自定义 `UpdateSource`，在每个镜像前缀之间回退 |
 
 技术组合：Go 1.27、WebView2、TypeScript、HTML5 Canvas、Vite。
 
@@ -178,7 +211,8 @@ snapbridge/
 ├── main.go              Go 后端：托盘、热键、剪贴板、窗口生命周期
 ├── capture_windows.go   Win32 GDI 屏幕与窗口抓取
 ├── hotkey_windows.go    PrintScreen 低级键盘钩子
-├── icon.go              托盘图标嵌入
+├── icon.go              托盘与应用图标嵌入
+├── update.go           自动更新的 GitHub 下载与镜像回退
 ├── index.html           遮罩层与工具栏结构
 ├── src/
 │   ├── main.ts          选区、标注、放大镜、提交逻辑
