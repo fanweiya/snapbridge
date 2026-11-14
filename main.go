@@ -453,6 +453,9 @@ func defaultSaveDir() string {
 func main() {
 	saveDir = defaultSaveDir()
 
+	// 声明界面语言，更新窗口才会跟着系统语言在中文与英文之间选。
+	mygo.App.SetLanguages("zh-Hans", "en")
+
 	// 更新检查与下载走镜像回退，必须在插件第一次检查之前装好。
 	useMirroredUpdates()
 	mygo.Use(updater.New(updater.Options{Icon: appIconPNG()}))

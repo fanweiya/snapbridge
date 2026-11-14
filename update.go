@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,31 +41,32 @@ const (
 var updateHTTP = &http.Client{Timeout: 30 * time.Minute}
 
 // openThrough 依次用各前缀拼接原始地址发起 GET，返回第一个成功的响应体。
+// 全部失败时把每个通道的错误一并报出来，方便判断是网络不通还是镜像挂了。
 func openThrough(ctx context.Context, prefixes []string, raw string) (io.ReadCloser, error) {
-	var lastErr error
+	var errs []error
 	for _, prefix := range prefixes {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, prefix+raw, nil)
 		if err != nil {
-			lastErr = err
+			errs = append(errs, fmt.Errorf("%s: %w", mirrorName(prefix), err))
 			continue
 		}
 		req.Header.Set("User-Agent", "SnapBridge-Updater")
 		resp, err := updateHTTP.Do(req)
 		if err != nil {
-			lastErr = fmt.Errorf("%s: %w", mirrorName(prefix), err)
+			errs = append(errs, fmt.Errorf("%s: %w", mirrorName(prefix), err))
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			lastErr = fmt.Errorf("%s: %s", mirrorName(prefix), resp.Status)
+			errs = append(errs, fmt.Errorf("%s: %s", mirrorName(prefix), resp.Status))
 			continue
 		}
 		return resp.Body, nil
 	}
-	if lastErr == nil {
-		lastErr = fmt.Errorf("没有可用的下载通道")
+	if len(errs) == 0 {
+		return nil, fmt.Errorf("没有可用的下载通道")
 	}
-	return nil, lastErr
+	return nil, fmt.Errorf("所有通道都失败: %w", errors.Join(errs...))
 }
 
 func mirrorName(prefix string) string {
