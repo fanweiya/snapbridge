@@ -76,6 +76,12 @@ body,
   border: 1.5px solid #2979ff;
   border-radius: 2px;
   z-index: 12;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.handle:hover {
+  transform: scale(1.3);
+  box-shadow: 0 0 0 2px rgba(41, 121, 255, 0.35);
 }
 
 .handle.nw { top: -5px; left: -5px; cursor: nwse-resize; }
@@ -99,6 +105,24 @@ body,
   font-variant-numeric: tabular-nums;
   pointer-events: none;
   white-space: nowrap;
+}
+
+.icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 #toolbar {
@@ -136,15 +160,27 @@ body,
   background: transparent;
   border: none;
   color: #d1d5db;
-  padding: 5px 8px;
+  padding: 5px 6px;
   border-radius: 5px;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   line-height: 1;
-  transition: all 0.12s ease;
+  min-width: 26px;
+  min-height: 26px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.tool-btn:focus-visible,
+.action-btn:focus-visible,
+.color-dot:focus-visible,
+.stroke-btn:focus-visible,
+.clip-pill:focus-visible {
+  outline: 2px solid #6ea8ff;
+  outline-offset: 2px;
 }
 
 .tool-btn:hover,
@@ -184,16 +220,36 @@ body,
 }
 
 .stroke-btn {
+  background: transparent;
+  border: none;
   color: #9e9e9e;
   cursor: pointer;
-  padding: 1px 3px;
-  border-radius: 3px;
-  font-size: 11px;
+  padding: 3px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.stroke-btn::before {
+  content: "";
+  width: var(--dot, 4px);
+  height: var(--dot, 4px);
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.stroke-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e5e7eb;
 }
 
 .stroke-btn.active {
-  color: #2979ff;
-  font-weight: bold;
+  background: rgba(41, 121, 255, 0.18);
+  color: #7aaaff;
 }
 
 .action-btn.primary {

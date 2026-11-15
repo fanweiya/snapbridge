@@ -497,7 +497,9 @@ async function submit(copy: boolean, save: boolean, mode?: string): Promise<void
 function setTool(next: ToolName): void {
   tool = next;
   for (const btn of Array.from(document.querySelectorAll<HTMLElement>(".tool-btn"))) {
-    btn.classList.toggle("active", btn.dataset.tool === next);
+    const active = btn.dataset.tool === next;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
   }
 }
 
@@ -670,7 +672,9 @@ function bindEvents(): void {
     dot.addEventListener("click", () => {
       strokeColor = dot.dataset.color ?? "#e53935";
       for (const d of Array.from(document.querySelectorAll<HTMLElement>(".color-dot"))) {
-        d.classList.toggle("active", d === dot);
+        const active = d === dot;
+        d.classList.toggle("active", active);
+        d.setAttribute("aria-pressed", active ? "true" : "false");
       }
     });
   }
@@ -678,7 +682,9 @@ function bindEvents(): void {
     sb.addEventListener("click", () => {
       strokeWeight = Number(sb.dataset.size ?? "4");
       for (const s of Array.from(document.querySelectorAll<HTMLElement>(".stroke-btn"))) {
-        s.classList.toggle("active", s === sb);
+        const active = s === sb;
+        s.classList.toggle("active", active);
+        s.setAttribute("aria-pressed", active ? "true" : "false");
       }
     });
   }

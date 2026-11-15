@@ -27,39 +27,56 @@
         <div id="sizeBadge">0 × 0</div>
       </div>
 
-      <!-- 工具栏（跟随选区） -->
-      <div id="toolbar" class="hidden">
-        <div class="tool-group">
-          <button class="tool-btn active" data-tool="select" title="选择与调整选区 (V)">↖</button>
-          <button class="tool-btn" data-tool="rect" title="矩形 (R)">□</button>
-          <button class="tool-btn" data-tool="arrow" title="箭头 (A)">➔</button>
-          <button class="tool-btn" data-tool="pen" title="画笔 (F)">✎</button>
-          <button class="tool-btn" data-tool="text" title="文字 (T)">T</button>
-          <button class="tool-btn" data-tool="step" title="序号图钉 (I)">①</button>
-          <button class="tool-btn" data-tool="highlight" title="荧光高亮 (H)">█</button>
-          <button class="tool-btn" data-tool="mosaic" title="马赛克 (B)">▦</button>
+      <!-- 线性图标集合，描边跟随按钮文字颜色 -->
+      <svg class="icon-sprite" aria-hidden="true" focusable="false">
+        <symbol id="i-select" viewBox="0 0 24 24"><path d="M5 3l14 8-6.4 1.5L9.9 20z" /></symbol>
+        <symbol id="i-rect" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" /></symbol>
+        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M6 18L18 6" /><path d="M9.5 6H18v8.5" /></symbol>
+        <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16z" /><path d="M14.5 5.5l4 4" /></symbol>
+        <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6h14" /><path d="M12 6v13" /></symbol>
+        <symbol id="i-step" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><text x="12" y="16" text-anchor="middle" font-size="11" font-weight="700" fill="currentColor" stroke="none">1</text></symbol>
+        <symbol id="i-highlight" viewBox="0 0 24 24"><path d="M9 15l-4 4v1h3l4-4" /><path d="M13 4l7 7-4.5 4.5-7-7z" /></symbol>
+        <symbol id="i-mosaic" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" /><rect x="13" y="4" width="7" height="7" /><rect x="4" y="13" width="7" height="7" /><rect x="13" y="13" width="7" height="7" /></symbol>
+        <symbol id="i-undo" viewBox="0 0 24 24"><path d="M5 9h9.5a5 5 0 010 10H9" /><path d="M9 5L5 9l4 4" /></symbol>
+        <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 4v10" /><path d="M8 10.5l4 4 4-4" /><path d="M5 19h14" /></symbol>
+        <symbol id="i-link" viewBox="0 0 24 24"><path d="M10.5 13.5a4 4 0 005.7 0l3-3a4 4 0 10-5.7-5.7l-1 1" /><path d="M13.5 10.5a4 4 0 00-5.7 0l-3 3a4 4 0 105.7 5.7l1-1" /></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l5 5L19 6.5" /></symbol>
+        <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12" /><path d="M18 6L6 18" /></symbol>
+      </svg>
+
+    <!-- 工具栏（跟随选区） -->
+      <div id="toolbar" class="hidden" role="toolbar" aria-label="标注工具">
+        <div class="tool-group" role="group" aria-label="工具">
+          <button type="button" class="tool-btn active" data-tool="select" title="选择与调整选区 (V)" aria-label="选择与调整选区" aria-pressed="true"><svg class="icon" aria-hidden="true"><use href="#i-select" /></svg></button>
+          <button type="button" class="tool-btn" data-tool="rect" title="矩形 (R)" aria-label="矩形" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-rect" /></svg></button>
+          <button type="button" class="tool-btn" data-tool="arrow" title="箭头 (A)" aria-label="箭头" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg></button>
+          <button type="button" class="tool-btn" data-tool="pen" title="画笔 (F)" aria-label="画笔" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-pen" /></svg></button>
+          <button type="button" class="tool-btn" data-tool="text" title="文字 (T)" aria-label="文字" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-text" /></svg></button>
+          <button type="button" class="tool-btn" data-tool="step" title="序号图钉 (I)" aria-label="序号图钉" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-step" /></svg></button>
+          <button type="button" class="tool-btn" data-tool="highlight" title="荧光高亮 (H)" aria-label="荧光高亮" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-highlight" /></svg></button>
+          <button type="button" class="tool-btn" data-tool="mosaic" title="马赛克 (B)" aria-label="马赛克" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-mosaic" /></svg></button>
         </div>
 
-        <div class="tool-group">
-          <button class="color-dot active" style="--c: #e53935" data-color="#e53935" title="红"></button>
-          <button class="color-dot" style="--c: #fb8c00" data-color="#fb8c00" title="橙"></button>
-          <button class="color-dot" style="--c: #43a047" data-color="#43a047" title="绿"></button>
-          <button class="color-dot" style="--c: #1e88e5" data-color="#1e88e5" title="蓝"></button>
-          <button class="color-dot" style="--c: #ffffff" data-color="#ffffff" title="白"></button>
-          <button class="color-dot" style="--c: #212121" data-color="#212121" title="黑"></button>
-          <div class="stroke-wrap">
-            <span class="stroke-btn" data-size="2" title="小号笔画">·</span>
-            <span class="stroke-btn active" data-size="4" title="中号笔画">●</span>
-            <span class="stroke-btn" data-size="8" title="大号笔画">⬤</span>
+        <div class="tool-group" role="group" aria-label="颜色与笔画">
+          <button type="button" class="color-dot active" style="--c: #e53935" data-color="#e53935" title="红" aria-label="标注颜色 红" aria-pressed="true"></button>
+          <button type="button" class="color-dot" style="--c: #fb8c00" data-color="#fb8c00" title="橙" aria-label="标注颜色 橙" aria-pressed="false"></button>
+          <button type="button" class="color-dot" style="--c: #43a047" data-color="#43a047" title="绿" aria-label="标注颜色 绿" aria-pressed="false"></button>
+          <button type="button" class="color-dot" style="--c: #1e88e5" data-color="#1e88e5" title="蓝" aria-label="标注颜色 蓝" aria-pressed="false"></button>
+          <button type="button" class="color-dot" style="--c: #ffffff" data-color="#ffffff" title="白" aria-label="标注颜色 白" aria-pressed="false"></button>
+          <button type="button" class="color-dot" style="--c: #212121" data-color="#212121" title="黑" aria-label="标注颜色 黑" aria-pressed="false"></button>
+          <div class="stroke-wrap" role="group" aria-label="笔画粗细">
+            <button type="button" class="stroke-btn" style="--dot: 4px" data-size="2" title="小号笔画" aria-label="小号笔画" aria-pressed="false"></button>
+            <button type="button" class="stroke-btn active" style="--dot: 7px" data-size="4" title="中号笔画" aria-label="中号笔画" aria-pressed="true"></button>
+            <button type="button" class="stroke-btn" style="--dot: 11px" data-size="8" title="大号笔画" aria-label="大号笔画" aria-pressed="false"></button>
           </div>
         </div>
 
-        <div class="tool-group actions">
-          <button id="btnUndo" class="action-btn" title="撤销 (Ctrl+Z)">↶</button>
-          <button id="btnSave" class="action-btn" title="保存文件 (Ctrl+S)">💾</button>
-          <button id="btnCopyPath" class="action-btn" title="仅复制文件路径 (Ctrl+Shift+C)">📋 路径</button>
-          <button id="btnOk" class="action-btn primary" title="复制完成 (Enter / 双击)">✓ 复制</button>
-          <button id="btnClose" class="action-btn close" title="取消 (Esc)">✕</button>
+        <div class="tool-group actions" role="group" aria-label="操作">
+          <button type="button" id="btnUndo" class="action-btn" title="撤销 (Ctrl+Z)" aria-label="撤销"><svg class="icon" aria-hidden="true"><use href="#i-undo" /></svg></button>
+          <button type="button" id="btnSave" class="action-btn" title="保存文件 (Ctrl+S)" aria-label="保存文件"><svg class="icon" aria-hidden="true"><use href="#i-save" /></svg></button>
+          <button type="button" id="btnCopyPath" class="action-btn" title="仅复制文件路径 (Ctrl+Shift+C)" aria-label="仅复制文件路径"><svg class="icon" aria-hidden="true"><use href="#i-link" /></svg><span>路径</span></button>
+          <button type="button" id="btnOk" class="action-btn primary" title="复制完成 (Enter / 双击)" aria-label="复制完成"><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg><span>复制</span></button>
+          <button type="button" id="btnClose" class="action-btn close" title="取消 (Esc)" aria-label="取消"><svg class="icon" aria-hidden="true"><use href="#i-close" /></svg></button>
         </div>
       </div>
 
