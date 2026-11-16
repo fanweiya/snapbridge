@@ -22,12 +22,11 @@ var (
 	procGetForegroundWindow           = user32.NewProc("GetForegroundWindow")
 	procGetWindowRect                 = user32.NewProc("GetWindowRect")
 	procCreateCompatibleDC            = gdi32.NewProc("CreateCompatibleDC")
-	procCreateCompatibleBitmap        = gdi32.NewProc("CreateCompatibleBitmap")
+	procCreateDIBSection              = gdi32.NewProc("CreateDIBSection")
 	procSelectObject                  = gdi32.NewProc("SelectObject")
 	procBitBlt                        = gdi32.NewProc("BitBlt")
 	procDeleteObject                  = gdi32.NewProc("DeleteObject")
 	procDeleteDC                      = gdi32.NewProc("DeleteDC")
-	procGetDIBits                     = gdi32.NewProc("GetDIBits")
 	procDwmFlush                      = dwmapi.NewProc("DwmFlush")
 )
 
@@ -102,9 +101,25 @@ func CaptureScreen() (*ScreenCapture, error) {
 	}
 	defer procDeleteDC.Call(hdcMem)
 
-	hBitmap, _, _ := procCreateCompatibleBitmap.Call(hdcScreen, uintptr(w), uintptr(h))
-	if hBitmap == 0 {
-		return nil, fmt.Errorf("CreateCompatibleBitmap 失败")
+	var info bitmapInfo
+	info.Header.Size = uint32(unsafe.Sizeof(info.Header))
+	info.Header.Width = int32(w)
+	info.Header.Height = -int32(h) // 负高度表示自上而下的 Top-down DIB
+	info.Header.Planes = 1
+	info.Header.BitCount = 32
+	info.Header.Compression = biRGB
+
+	var pBits unsafe.Pointer
+	hBitmap, _, _ := procCreateDIBSection.Call(
+		hdcScreen,
+		uintptr(unsafe.Pointer(&info)),
+		uintptr(dibRGBColors),
+		uintptr(unsafe.Pointer(&pBits)),
+		0,
+		0,
+	)
+	if hBitmap == 0 || pBits == nil {
+		return nil, fmt.Errorf("CreateDIBSection 失败")
 	}
 	defer procDeleteObject.Call(hBitmap)
 
@@ -116,29 +131,11 @@ func CaptureScreen() (*ScreenCapture, error) {
 		return nil, fmt.Errorf("BitBlt 失败")
 	}
 
+	rawSlice := unsafe.Slice((*byte)(pBits), int(w*h*4))
 	img := image.NewRGBA(image.Rect(0, 0, int(w), int(h)))
-	var info bitmapInfo
-	info.Header.Size = uint32(unsafe.Sizeof(info.Header))
-	info.Header.Width = int32(w)
-	info.Header.Height = -int32(h)
-	info.Header.Planes = 1
-	info.Header.BitCount = 32
-	info.Header.Compression = biRGB
+	copy(img.Pix, rawSlice)
 
-	lines, _, _ := procGetDIBits.Call(
-		hdcMem,
-		hBitmap,
-		0,
-		uintptr(h),
-		uintptr(unsafe.Pointer(&img.Pix[0])),
-		uintptr(unsafe.Pointer(&info)),
-		uintptr(dibRGBColors),
-	)
-	if lines == 0 {
-		return nil, fmt.Errorf("GetDIBits 失败")
-	}
-
-	// GDI 给的是 BGRA，交换红蓝通道并补齐不透明度。
+	// GDI 给出的像素排列为 BGRA，调换红色与蓝色通道，并填充不透明度。
 	for i := 0; i < len(img.Pix); i += 4 {
 		img.Pix[i], img.Pix[i+2] = img.Pix[i+2], img.Pix[i]
 		img.Pix[i+3] = 255
