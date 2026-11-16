@@ -53,10 +53,12 @@ let tool: ToolName = "select";
 let strokeColor = "#e53935";
 let strokeWeight = 4;
 let stepCounter = 0;
-let dragMode: "none" | "select" | "move" | "draw" | "handle" = "none";
+let dragMode: "none" | "select" | "move" | "draw" | "handle" | "shape" = "none";
 let handleDir = "";
 let dragOrigin: Point = { x: 0, y: 0 };
 let dragBoxOrigin: Box = { x: 0, y: 0, w: 0, h: 0 };
+let selectedShapeIndex = -1;
+let dragShapeOrigin: Shape | null = null;
 let draft: Shape | null = null;
 let pendingText: Point | null = null;
 let clipMode = "both";
@@ -125,6 +127,14 @@ function layoutSelection(): void {
   selectionBox.style.width = `${css.w}px`;
   selectionBox.style.height = `${css.h}px`;
   sizeBadge.textContent = `${Math.round(selection.w)} × ${Math.round(selection.h)}`;
+  if (css.y < 28) {
+    sizeBadge.style.top = "6px";
+    sizeBadge.style.left = "6px";
+  } else {
+    sizeBadge.style.top = "-26px";
+    sizeBadge.style.left = "0px";
+  }
+  magnifier.classList.add("hidden");
   layoutToolbar(css);
   renderAnnotations();
 }
@@ -192,6 +202,18 @@ function renderAnnotations(): void {
   const scale = ratio();
   for (const s of shapes) paintShape(ctx, s, scale);
   if (draft) paintShape(ctx, draft, scale);
+  if (selectedShapeIndex >= 0 && selectedShapeIndex < shapes.length) {
+    const sel = shapes[selectedShapeIndex];
+    if (sel) {
+      const b = getShapeBounds(sel);
+      ctx.save();
+      ctx.strokeStyle = "rgba(41, 121, 255, 0.95)";
+      ctx.lineWidth = 1.5 * scale;
+      ctx.setLineDash([4 * scale, 4 * scale]);
+      ctx.strokeRect(b.x - 3 * scale, b.y - 3 * scale, b.w + 6 * scale, b.h + 6 * scale);
+      ctx.restore();
+    }
+  }
 }
 
 function paintShape(ctx: CanvasRenderingContext2D, s: Shape, scale: number): void {
@@ -297,6 +319,132 @@ function paintMosaic(ctx: CanvasRenderingContext2D, box: Box, block: number): vo
   ctx.imageSmoothingEnabled = prev;
 }
 
+function getShapeBounds(s: Shape): Box {
+  if (s.kind === "rect" || s.kind === "highlight" || s.kind === "mosaic") {
+    return { ...s.box };
+  } else if (s.kind === "arrow") {
+    const x = Math.min(s.from.x, s.to.x);
+    const y = Math.min(s.from.y, s.to.y);
+    return { x, y, w: Math.max(1, Math.abs(s.to.x - s.from.x)), h: Math.max(1, Math.abs(s.to.y - s.from.y)) };
+  } else if (s.kind === "pen") {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const pt of s.points) {
+      if (pt.x < minX) minX = pt.x;
+      if (pt.y < minY) minY = pt.y;
+      if (pt.x > maxX) maxX = pt.x;
+      if (pt.y > maxY) maxY = pt.y;
+    }
+    if (!Number.isFinite(minX)) return { x: 0, y: 0, w: 0, h: 0 };
+    return { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) };
+  } else if (s.kind === "step") {
+    return { x: s.at.x - 16, y: s.at.y - 16, w: 32, h: 32 };
+  } else if (s.kind === "text") {
+    const maxLen = Math.max(...s.lines.map((l) => l.length), 1);
+    return { x: s.at.x, y: s.at.y, w: maxLen * s.size * 0.75, h: s.lines.length * s.size * 1.35 };
+  }
+  return { x: 0, y: 0, w: 0, h: 0 };
+}
+
+function distanceToSegment(p: Point, a: Point, b: Point): number {
+  const l2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
+  if (l2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+  let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (a.x + t * (b.x - a.x)), p.y - (a.y + t * (b.y - a.y)));
+}
+
+function hitTestShape(p: Point): number {
+  for (let i = shapes.length - 1; i >= 0; i--) {
+    const s = shapes[i];
+    if (!s) continue;
+    if (s.kind === "rect" || s.kind === "highlight" || s.kind === "mosaic") {
+      const tol = 8;
+      if (
+        p.x >= s.box.x - tol &&
+        p.x <= s.box.x + s.box.w + tol &&
+        p.y >= s.box.y - tol &&
+        p.y <= s.box.y + s.box.h + tol
+      ) {
+        return i;
+      }
+    } else if (s.kind === "arrow") {
+      if (distanceToSegment(p, s.from, s.to) <= 12) {
+        return i;
+      }
+    } else if (s.kind === "pen") {
+      for (let j = 0; j < s.points.length - 1; j++) {
+        const pt1 = s.points[j];
+        const pt2 = s.points[j + 1];
+        if (pt1 && pt2 && distanceToSegment(p, pt1, pt2) <= 10) {
+          return i;
+        }
+      }
+    } else if (s.kind === "step") {
+      if (Math.hypot(p.x - s.at.x, p.y - s.at.y) <= 20) {
+        return i;
+      }
+    } else if (s.kind === "text") {
+      const maxLen = Math.max(...s.lines.map((l) => l.length), 1);
+      const w = maxLen * s.size * 0.75;
+      const h = s.lines.length * s.size * 1.35;
+      if (p.x >= s.at.x - 4 && p.x <= s.at.x + w + 4 && p.y >= s.at.y - 4 && p.y <= s.at.y + h + 4) {
+        return i;
+      }
+    }
+  }
+  return -1;
+}
+
+function cloneShape(s: Shape): Shape {
+  if (s.kind === "rect" || s.kind === "highlight" || s.kind === "mosaic") {
+    return { ...s, box: { ...s.box } };
+  } else if (s.kind === "arrow") {
+    return { ...s, from: { ...s.from }, to: { ...s.to } };
+  } else if (s.kind === "pen") {
+    return { ...s, points: s.points.map((pt) => ({ ...pt })) };
+  } else if (s.kind === "text") {
+    return { ...s, at: { ...s.at }, lines: [...s.lines] };
+  } else if (s.kind === "step") {
+    return { ...s, at: { ...s.at } };
+  }
+  return s;
+}
+
+function translateShape(s: Shape, origin: Shape, dx: number, dy: number): void {
+  if (s.kind === "rect" || s.kind === "highlight" || s.kind === "mosaic") {
+    if (origin.kind === s.kind) {
+      s.box.x = origin.box.x + dx;
+      s.box.y = origin.box.y + dy;
+    }
+  } else if (s.kind === "arrow") {
+    if (origin.kind === "arrow") {
+      s.from.x = origin.from.x + dx;
+      s.from.y = origin.from.y + dy;
+      s.to.x = origin.to.x + dx;
+      s.to.y = origin.to.y + dy;
+    }
+  } else if (s.kind === "pen") {
+    if (origin.kind === "pen") {
+      for (let i = 0; i < s.points.length; i++) {
+        const opt = origin.points[i];
+        const pt = s.points[i];
+        if (opt && pt) {
+          pt.x = opt.x + dx;
+          pt.y = opt.y + dy;
+        }
+      }
+    }
+  } else if (s.kind === "text" || s.kind === "step") {
+    if (origin.kind === s.kind) {
+      s.at.x = origin.at.x + dx;
+      s.at.y = origin.at.y + dy;
+    }
+  }
+}
+
 function beginSelect(p: Point): void {
   dragMode = "select";
   dragOrigin = p;
@@ -305,6 +453,8 @@ function beginSelect(p: Point): void {
   redoStack = [];
   stepCounter = 0;
   draft = null;
+  selectedShapeIndex = -1;
+  dragShapeOrigin = null;
   layoutSelection();
 }
 
@@ -353,6 +503,16 @@ function updateDrag(p: Point, shift: boolean): void {
     const dy = p.y - dragOrigin.y;
     selection = clampBox({ ...dragBoxOrigin, x: dragBoxOrigin.x + dx, y: dragBoxOrigin.y + dy });
     layoutSelection();
+    return;
+  }
+  if (dragMode === "shape" && selectedShapeIndex >= 0 && dragShapeOrigin) {
+    const s = shapes[selectedShapeIndex];
+    if (s) {
+      const dx = p.x - dragOrigin.x;
+      const dy = p.y - dragOrigin.y;
+      translateShape(s, dragShapeOrigin, dx, dy);
+      renderAnnotations();
+    }
     return;
   }
   if (dragMode === "handle" && selection) {
@@ -412,6 +572,9 @@ function endDrag(): void {
       redoStack = [];
     }
     draft = null;
+  }
+  if (dragMode === "shape") {
+    dragShapeOrigin = null;
   }
   dragMode = "none";
   layoutSelection();
@@ -496,14 +659,17 @@ async function submit(copy: boolean, save: boolean, mode?: string): Promise<void
 
 function setTool(next: ToolName): void {
   tool = next;
+  selectedShapeIndex = -1;
   for (const btn of Array.from(document.querySelectorAll<HTMLElement>(".tool-btn"))) {
     const active = btn.dataset.tool === next;
     btn.classList.toggle("active", active);
     btn.setAttribute("aria-pressed", active ? "true" : "false");
   }
+  renderAnnotations();
 }
 
 function undo(): void {
+  selectedShapeIndex = -1;
   const last = shapes.pop();
   if (last) {
     redoStack.push(last);
@@ -513,6 +679,7 @@ function undo(): void {
 }
 
 function redo(): void {
+  selectedShapeIndex = -1;
   const last = redoStack.pop();
   if (last) {
     shapes.push(last);
@@ -522,7 +689,10 @@ function redo(): void {
 }
 
 function updateMagnifier(e: MouseEvent): void {
-  if (!image) return;
+  if (!image || selection || dragMode !== "none") {
+    magnifier.classList.add("hidden");
+    return;
+  }
   const p = toImagePoint(e);
   const size = 96;
   const zoom = 6;
@@ -542,15 +712,24 @@ function updateMagnifier(e: MouseEvent): void {
 
   magInfo.textContent = `${Math.round(p.x)}, ${Math.round(p.y)}`;
   magnifier.classList.remove("hidden");
-  const left = e.clientX + 24;
-  const top = e.clientY + 24;
-  magnifier.style.left = `${Math.min(left, window.innerWidth - 110)}px`;
-  magnifier.style.top = `${Math.min(top, window.innerHeight - 140)}px`;
+  const magW = 100;
+  const magH = 130;
+  let left = e.clientX + 24;
+  let top = e.clientY + 24;
+  if (left + magW > window.innerWidth - 8) {
+    left = e.clientX - magW - 16;
+  }
+  if (top + magH > window.innerHeight - 8) {
+    top = e.clientY - magH - 16;
+  }
+  magnifier.style.left = `${Math.max(8, left)}px`;
+  magnifier.style.top = `${Math.max(8, top)}px`;
 }
 
 function bindEvents(): void {
   app.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
+    magnifier.classList.add("hidden");
     const target = e.target as HTMLElement;
     if (target.closest("#toolbar") || target.closest("#hintBar") || target.closest("#textEditor")) return;
     const handle = target.closest<HTMLElement>(".handle");
@@ -569,6 +748,20 @@ function bindEvents(): void {
       return;
     }
     if (tool === "select") {
+      const hit = hitTestShape(p);
+      if (hit !== -1) {
+        selectedShapeIndex = hit;
+        const targetShape = shapes[hit];
+        if (targetShape) {
+          dragMode = "shape";
+          dragOrigin = p;
+          dragShapeOrigin = cloneShape(targetShape);
+          renderAnnotations();
+          return;
+        }
+      }
+      selectedShapeIndex = -1;
+      renderAnnotations();
       beginMove(p);
       return;
     }
@@ -576,9 +769,14 @@ function bindEvents(): void {
   });
 
   window.addEventListener("pointermove", (e) => {
-    if (!selection) updateMagnifier(e);
+    if (!selection && dragMode === "none") updateMagnifier(e);
+    else magnifier.classList.add("hidden");
     if (dragMode === "none") return;
     updateDrag(toImagePoint(e), e.shiftKey);
+  });
+
+  window.addEventListener("pointerleave", () => {
+    magnifier.classList.add("hidden");
   });
 
   window.addEventListener("pointerup", () => {
@@ -599,6 +797,16 @@ function bindEvents(): void {
     if (key === "Escape") {
       e.preventDefault();
       void Shot.cancel();
+      return;
+    }
+    if ((key === "Delete" || key === "Backspace") && selectedShapeIndex >= 0 && selectedShapeIndex < shapes.length) {
+      e.preventDefault();
+      const removed = shapes.splice(selectedShapeIndex, 1)[0];
+      if (removed) {
+        redoStack.push(removed);
+      }
+      selectedShapeIndex = -1;
+      renderAnnotations();
       return;
     }
     if (key === "Enter" && !e.ctrlKey) {
