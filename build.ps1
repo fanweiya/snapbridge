@@ -27,10 +27,13 @@ if (-not $env:GOPROXY) { $env:GOPROXY = "https://proxy.golang.org,direct" }
 # 私钥留在 %APPDATA%\mygo\update-keys\ 下，不进仓库，也不打印到日志。
 if (-not $env:MYGO_UPDATER_PRIVATE_KEY) {
   $keyFile = Join-Path $env:APPDATA "mygo\update-keys\mygo-update.key"
+  $backupKeyFile = "C:\workspace\fanweiya相关\snapbridge-keys\mygo-update.key"
   if (Test-Path $keyFile) {
     $env:MYGO_UPDATER_PRIVATE_KEY = (Get-Content $keyFile -Raw).Trim()
+  } elseif (Test-Path $backupKeyFile) {
+    $env:MYGO_UPDATER_PRIVATE_KEY = (Get-Content $backupKeyFile -Raw).Trim()
   } else {
-    Write-Warning "找不到更新私钥 $keyFile，本次构建不会产出更新包。先运行 mygo keygen。"
+    Write-Warning "找不到更新私钥，本次构建不会产出更新包。先运行 mygo keygen。"
   }
 }
 
