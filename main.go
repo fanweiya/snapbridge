@@ -55,6 +55,8 @@ type CommitResult struct {
 const maxImageDimension = 16384
 const maxImagePixels = 64 * 1024 * 1024
 
+const appVersion = "0.1.6"
+
 // validatePNG 完整校验前端传回的图片数据流，保证图片未损坏截断，并返回宽高尺寸。
 func validatePNG(data []byte) (int, int, error) {
 	cfg, err := png.DecodeConfig(bytes.NewReader(data))
@@ -442,6 +444,8 @@ func buildTrayMenu() *mygo.Menu {
 		}
 	}
 	return mygo.NewMenu([]*mygo.MenuItem{
+		{Label: "SnapBridge v" + appVersion, Disabled: true},
+		mygo.Separator(),
 		{Label: "区域截图", Accelerator: "PrintScreen", Click: func(*mygo.MenuItem, *mygo.Window) { openCapture("region") }},
 		{Label: "全屏截图", Accelerator: "Ctrl+PrintScreen", Click: func(*mygo.MenuItem, *mygo.Window) { openCapture("fullscreen") }},
 		{Label: "当前窗口", Accelerator: "Alt+PrintScreen", Click: func(*mygo.MenuItem, *mygo.Window) { openCapture("window") }},
@@ -475,7 +479,7 @@ func setupTray(icon []byte) {
 	t, err := mygo.NewTray(mygo.TrayOptions{
 		ID:      "main",
 		Icon:    icon,
-		ToolTip: "SnapBridge · PrintScreen 截图",
+		ToolTip: "SnapBridge v" + appVersion + " · PrintScreen 截图",
 		Menu:    buildTrayMenu(),
 	})
 	if err != nil {
