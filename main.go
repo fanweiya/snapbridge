@@ -55,7 +55,7 @@ type CommitResult struct {
 const maxImageDimension = 16384
 const maxImagePixels = 64 * 1024 * 1024
 
-const appVersion = "0.1.6"
+const appVersion = "0.1.7"
 
 // validatePNG 完整校验前端传回的图片数据流，保证图片未损坏截断，并返回宽高尺寸。
 func validatePNG(data []byte) (int, int, error) {
